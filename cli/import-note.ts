@@ -1421,16 +1421,21 @@ async function importFile(
 	verbose: boolean
 ): Promise<{ success: boolean; noteId?: string; error?: string }> {
 	try {
-		const content = fs.readFileSync(filePath, 'utf-8');
-		const title = path.basename(filePath, '.md');
-
+		let content = fs.readFileSync(filePath, 'utf-8');
+		
+		// 解析并移除 Front Matter
+		const { frontMatter, content: cleanContent } = parseFrontMatter(content);
+		
+		// 使用 Front Matter 中的 title，否则使用文件名
+		const title = frontMatter.title || path.basename(filePath, '.md');
+		
 		if (verbose) {
-			console.log(`  正在导入: ${filePath}`);
-			console.log(`  标题: ${title}`);
-			console.log(`  内容长度: ${content.length} 字符`);
+			console.log(`  正在导入：${filePath}`);
+			console.log(`  标题：${title}`);
+			console.log(`  内容长度：${cleanContent.length} 字符`);
 		}
-
-		const noteId = await api.importNote(title, content, folderId, verbose);
+		
+		const noteId = await api.importNote(title, cleanContent, folderId, verbose);
 
 		if (verbose) {
 			console.log(`  成功! 笔记 ID: ${noteId}`);
@@ -1454,21 +1459,26 @@ async function importFileWithImages(
 ): Promise<{ success: boolean; noteId?: string; error?: string; imagesUploaded: number; imagesFailed: number }> {
 	try {
 		let content = fs.readFileSync(filePath, 'utf-8');
-		const title = path.basename(filePath, '.md');
+		
+		// 解析并移除 Front Matter
+		const { frontMatter, content: cleanContent } = parseFrontMatter(content);
+		
+		// 使用 Front Matter 中的 title，否则使用文件名
+		const title = frontMatter.title || path.basename(filePath, '.md');
 
 		// 提取图片引用
-		const imageRefs = extractImageReferences(content);
+		const imageRefs = extractImageReferences(cleanContent);
 
 		if (verbose) {
 			console.log(`  正在导入: ${filePath}`);
 			console.log(`  标题: ${title}`);
-			console.log(`  内容长度: ${content.length} 字符`);
+			console.log(`  内容长度: ${cleanContent.length} 字符`);
 			console.log(`  发现 ${imageRefs.length} 个图片引用`);
 		}
 
 		// 如果没有图片，直接导入纯文本
 		if (imageRefs.length === 0) {
-			const noteId = await api.importNote(title, content, folderId, verbose);
+			const noteId = await api.importNote(title, cleanContent, folderId, verbose);
 			return { success: true, noteId, imagesUploaded: 0, imagesFailed: 0 };
 		}
 
@@ -1522,7 +1532,7 @@ async function importFileWithImages(
 		}
 
 		// 替换 Markdown 图片引用为小米格式
-		const processedContent = replaceMarkdownImagesWithMinoteFormat(content, imageMap);
+		const processedContent = replaceMarkdownImagesWithMinoteFormat(cleanContent, imageMap);
 
 		// 准备图片元数据
 		const imagesForNote: Array<{ fileId: string; mimeType: string; digest: string }> = [];
@@ -1743,7 +1753,7 @@ async function main(): Promise<void> {
 		// 创建新状态
 		stateManager = new ImportState(sourceDir, options.stateFile);
 		// 如果使用了文件夹分类，传入带文件夹信息的文件列表
-		if (options.organizeByFolder && filesWithFolder.length > 0) {
+		if (filesWithFolder.length > 0) {
 			stateManager.initializePending(filesWithFolder.map(f => f.filePath));
 		} else {
 			stateManager.initializePending(files);

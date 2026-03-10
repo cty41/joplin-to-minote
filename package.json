@@ -1,0 +1,27 @@
+{
+  "name": "joplin-to-minote",
+  "version": "1.0.0",
+  "description": "Import Joplin notes to Xiaomi Cloud (小米云笔记)",
+  "main": "cli/import-note.ts",
+  "scripts": {
+    "import": "ts-node cli/import-note.ts",
+    "import:help": "ts-node cli/import-note.ts --help"
+  },
+  "keywords": ["joplin", "xiaomi", "minote", "import", "migration"],
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^16.11.6",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.0.0"
+  },
+  "bin": {
+    "joplin-to-minote": "cli/import-note.ts"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "mi-note-automation",
+  "version": "1.0.0",
+  "description": "Automated image upload to Xiaomi Cloud using Playwright",
+  "main": "batch-import.js",
+  "scripts": {
+    "import": "node batch-import.js",
+    "test": "node test-uploader.js"
+  },
+  "keywords": ["xiaomi", "cloud", "notes", "automation", "playwright"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}

@@ -14,6 +14,111 @@ import * as os from 'os';
 import * as https from 'https';
 import * as zlib from 'zlib';
 import * as crypto from 'crypto';
+
+// ==================== Front Matter 类型定义 ====================
+
+interface FrontMatter {
+	title?: string;
+	updated?: string;
+	created?: string;
+	author?: string;
+	tags?: string[];
+	latitude?: number;
+	longitude?: number;
+	altitude?: number;
+}
+
+interface MarkdownFile {
+	filePath: string;
+	frontMatter: FrontMatter;
+	updatedTime: Date;
+	createTime: Date;
+}
+
+// ==================== Front Matter 解析函数 ====================
+
+/**
+ * 解析 YAML Front Matter
+ */
+function parseFrontMatter(content: string): { frontMatter: FrontMatter; content: string } {
+	const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+	if (!match) {
+		return { frontMatter: {}, content };
+	}
+	
+	const yamlStr = match[1];
+	const frontMatter: FrontMatter = {};
+	
+	yamlStr.split('\n').forEach(line => {
+		const colonIndex = line.indexOf(':');
+		if (colonIndex === -1) return;
+		
+		const key = line.slice(0, colonIndex).trim();
+		const value = line.slice(colonIndex + 1).trim();
+		
+		if (!key || !value) return;
+		
+		if (key === 'tags') {
+			if (value === '') {
+				const tagLines = yamlStr.split('\n');
+				const tags: string[] = [];
+				let inTagsBlock = false;
+				
+				for (const tagLine of tagLines) {
+					if (tagLine.startsWith('tags:')) {
+						inTagsBlock = true;
+						continue;
+					}
+					if (inTagsBlock) {
+						if (tagLine.match(/^\s{2}-\s/)) {
+							tags.push(tagLine.replace(/^\s{2}-\s/, '').trim());
+						} else if (tagLine.match(/^\S/)) {
+							break;
+						}
+					}
+				}
+				
+				if (tags.length > 0) {
+					frontMatter.tags = tags;
+				}
+			} else {
+				frontMatter.tags = value.split(',').map(t => t.trim());
+			}
+		} else if (['latitude', 'longitude', 'altitude'].includes(key)) {
+			const numValue = parseFloat(value);
+			if (!isNaN(numValue)) {
+				(frontMatter as any)[key] = numValue;
+			}
+		} else {
+			(frontMatter as any)[key] = value;
+		}
+	});
+	
+	const contentWithoutFm = content.slice(match[0].length);
+	return { frontMatter, content: contentWithoutFm };
+}
+
+/**
+ * 格式化 Front Matter 元数据为可读文本
+ */
+function formatMetadata(fm: FrontMatter): string {
+	const lines: string[] = [];
+	
+	if (fm.author) lines.push(`作者：${fm.author}`);
+	if (fm.tags && fm.tags.length > 0) lines.push(`标签：${fm.tags.join(', ')}`);
+	if (fm.updated) lines.push(`更新时间：${fm.updated}`);
+	if (fm.created) lines.push(`创建时间：${fm.created}`);
+	if (fm.latitude !== undefined && fm.longitude !== undefined) {
+		lines.push(`位置：${fm.latitude}, ${fm.longitude}`);
+	}
+	
+	if (lines.length > 0) {
+		return lines.join('\n') + '\n\n---\n\n';
+	}
+	
+	return '';
+}
+
 // ==================== ImportState 状态管理类 ====================
 
 interface FileImportState {

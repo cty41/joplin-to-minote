@@ -1443,6 +1443,28 @@ function replaceMarkdownImagesWithMinoteFormat(
 	return result;
 }
 
+/**
+ * 清理和修复内容，处理 URI malformed 错误
+ */
+function sanitizeContent(content: string): string {
+	let cleaned = content.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\uFFFE-\uFFFF]/g, '');
+	
+	try {
+		cleaned = decodeURIComponent(cleaned);
+	} catch (e) {
+		const lines = cleaned.split('\n');
+		cleaned = lines.map(line => {
+			try {
+				return decodeURIComponent(line);
+			} catch {
+				return line.replace(/%[0-9A-Fa-f]{0,2}/g, '');
+			}
+		}).join('\n');
+	}
+	
+	return cleaned;
+}
+
 async function importFile(
 	api: MinoteApiCli,
 	filePath: string,
@@ -1453,7 +1475,10 @@ async function importFile(
 		let content = fs.readFileSync(filePath, 'utf-8');
 		
 		// 解析并移除 Front Matter
-		const { frontMatter, content: cleanContent } = parseFrontMatter(content);
+		let { frontMatter, content: cleanContent } = parseFrontMatter(content);
+		
+		// 清理和修复内容
+		cleanContent = sanitizeContent(cleanContent);
 		
 		// 使用 Front Matter 中的 title，否则使用文件名
 		const title = frontMatter.title || path.basename(filePath, '.md');
@@ -1490,7 +1515,10 @@ async function importFileWithImages(
 		let content = fs.readFileSync(filePath, 'utf-8');
 		
 		// 解析并移除 Front Matter
-		const { frontMatter, content: cleanContent } = parseFrontMatter(content);
+		let { frontMatter, content: cleanContent } = parseFrontMatter(content);
+		
+		// 清理和修复内容
+		cleanContent = sanitizeContent(cleanContent);
 		
 		// 使用 Front Matter 中的 title，否则使用文件名
 		const title = frontMatter.title || path.basename(filePath, '.md');

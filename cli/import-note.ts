@@ -1064,7 +1064,9 @@ interface CliOptions {
 	stateFile?: string;
 	retryFailed?: boolean;
 	organizeByFolder?: boolean;
+	flat?: boolean;
 	preserveOrder?: boolean;
+	noSort?: boolean;
 	listNotes?: boolean;
 	deleteNoteId?: string;
 	deleteNoteTag?: string;
@@ -1088,8 +1090,9 @@ function showHelp(): void {
   --state-file <path>    指定状态文件路径（用于断点续传）
   --resume <path>        从状态文件恢复导入（断点续传）
   --retry-failed         重试上次失败的文件
-  --organize-by-folder   根据子目录自动创建文件夹并分类导入
-  --preserve-order       按文件创建时间排序导入（旧→新）
+  --flat                 禁用自动文件夹分类，所有笔记导入到同一文件夹
+  --no-sort              禁用按 Front Matter 时间排序（默认启用）
+  --preserve-order       按文件创建时间排序导入（旧→新，已默认启用）
   --list-notes           列出小米云中的所有笔记
   --delete-note-id <id>  删除指定ID的笔记（需同时提供 --delete-note-tag）
   --delete-note-tag <tag> 删除笔记所需的 tag 参数
@@ -1190,6 +1193,13 @@ function parseArgs(args: string[]): CliOptions {
 		case '--retry-failed':
 			options.retryFailed = true;
 			break;
+		case '--flat':
+			options.flat = true;
+			options.organizeByFolder = false;
+			break;
+		case '--no-sort':
+			options.preserveOrder = false;
+			break;
 		case '--organize-by-folder':
 			options.organizeByFolder = true;
 			break;
@@ -1285,9 +1295,27 @@ function scanDirectoryWithFolders(dirPath: string): {
 				}
 				traverse(fullPath, entryRelativePath);
 			} else if (entry.isFile() && entry.name.endsWith('.md')) {
-				// 获取文件创建时间
-				const stats = fs.statSync(fullPath);
-				const createTime = stats.birthtime || stats.ctime;
+				// 读取文件内容，解析 Front Matter 获取创建时间
+				let createTime: Date;
+				try {
+					const content = fs.readFileSync(fullPath, 'utf-8');
+					const { frontMatter } = parseFrontMatter(content);
+					
+					// 优先使用 Front Matter 中的 created 或 updated 时间
+					if (frontMatter.created) {
+						createTime = new Date(frontMatter.created);
+					} else if (frontMatter.updated) {
+						createTime = new Date(frontMatter.updated);
+					} else {
+						// 否则使用文件系统时间
+						const stats = fs.statSync(fullPath);
+						createTime = stats.birthtime || stats.ctime;
+					}
+				} catch (err) {
+					// 读取失败时使用文件系统时间
+					const stats = fs.statSync(fullPath);
+					createTime = stats.birthtime || stats.ctime;
+				}
 
 				// 确定文件夹名（相对路径的第一级目录）
 				let folderName: string | null = null;
@@ -1676,12 +1704,14 @@ async function main(): Promise<void> {
 
 	console.log(`找到 ${files.length} 个 Markdown 文件`);
 
-	// 文件夹分类模式
+	// 文件夹分类模式（默认启用，除非使用 --flat 禁用）
 	let folderMapping: Map<string, string> = new Map(); // folderName -> folderId
 	let filesWithFolder: Array<{ filePath: string; folderName: string | null; folderId: string; createTime: Date }> = [];
 	
-	if (options.organizeByFolder && options.dir) {
-		console.log('\n[Organize] 启用文件夹分类模式');
+	const shouldOrganizeByFolder = options.flat !== true && options.dir;
+	
+	if (shouldOrganizeByFolder && options.dir) {
+		console.log('\n[Organize] 启用文件夹分类模式（默认行为，使用 --flat 禁用）');
 		
 		// 扫描目录，获取文件和文件夹信息
 		const { files: scannedFiles, folderNames } = scanDirectoryWithFolders(options.dir);
@@ -1729,9 +1759,9 @@ async function main(): Promise<void> {
 			});
 		}
 		
-		// 如果需要保留时间顺序，按创建时间排序
-		if (options.preserveOrder) {
-			console.log('[Organize] 按文件创建时间排序（旧→新）');
+		// 默认按创建时间排序（旧→新），除非使用 --no-sort 禁用
+		if (options.preserveOrder !== false) {
+			console.log('[Organize] 按 Front Matter 创建时间排序（旧→新），使用 --no-sort 禁用');
 			filesWithFolder.sort((a, b) => a.createTime.getTime() - b.createTime.getTime());
 		}
 		
@@ -1764,8 +1794,8 @@ async function main(): Promise<void> {
 
 	// 开始导入
 	const defaultFolderId = options.folderId || '0';
-	if (!options.organizeByFolder) {
-		console.log(`\n目标文件夹 ID: ${defaultFolderId}`);
+	if (options.flat === true) {
+		console.log(`\n目标文件夹 ID: ${defaultFolderId}（使用 --flat 禁用自动分类）`);
 	}
 	console.log('开始导入...\n');
 
@@ -1787,7 +1817,7 @@ async function main(): Promise<void> {
 		let targetFolderId = defaultFolderId;
 		let folderName: string | null = null;
 		
-		if (options.organizeByFolder && filesWithFolder.length > 0) {
+		if (filesWithFolder.length > 0) {
 			const fileInfo = filesWithFolder.find(f => f.filePath === file);
 			if (fileInfo) {
 				targetFolderId = fileInfo.folderId;

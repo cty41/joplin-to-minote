@@ -1289,8 +1289,9 @@ function scanDirectoryWithFolders(dirPath: string): {
 			const entryRelativePath = path.join(relativePath, entry.name);
 
 			if (entry.isDirectory()) {
-				// 跳过资源目录（以 _ 开头的目录）
-				if (entry.name.startsWith('_')) {
+				// 跳过系统文件夹和资源文件夹
+				const skipFolders = ['node_modules', '.git', 'dist', '.vscode', '.idea', 'automation', 'cli', 'test', 'tests', '__tests__'];
+				if (entry.name.startsWith('_') || skipFolders.includes(entry.name)) {
 					continue;
 				}
 				traverse(fullPath, entryRelativePath);
